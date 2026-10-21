@@ -77,7 +77,7 @@ def coerce_int(value: object, *, name: str, default: int | None = None) -> int:
         raise ValueError(f"{name} must be an integer") from exc
 
 
-def coerce_bool(value: object, *, default: bool = False) -> bool:
+def coerce_bool(value: object, default: bool = False) -> bool:
     if value is None:
         return default
     if isinstance(value, bool):
@@ -85,9 +85,9 @@ def coerce_bool(value: object, *, default: bool = False) -> bool:
     if isinstance(value, (int, float)):
         return bool(value)
     normalized = str(value).strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
+    if normalized in {"1", "true", "yes", "on", "enabled"}:
         return True
-    if normalized in {"0", "false", "no", "off", ""}:
+    if normalized in {"0", "false", "no", "off", "disabled", ""}:
         return False
     return default
 

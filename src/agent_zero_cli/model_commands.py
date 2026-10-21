@@ -8,11 +8,13 @@ from agent_zero_cli.model_config import (
     apply_model_switcher_state,
     coerce_model_config,
     collect_provider_options,
+    override_main_model,
 )
 from agent_zero_cli.state_sync import model_switcher_signature
 from agent_zero_cli.screens.model_presets import ModelPresetsResult, ModelPresetsScreen
 from agent_zero_cli.screens.model_runtime import ModelRuntimeResult, ModelRuntimeScreen
 from agent_zero_cli.widgets.model_switcher_bar import ModelSwitcherBar
+from agent_zero_cli.text_utils import as_mapping, coerce_bool
 
 if TYPE_CHECKING:
     from agent_zero_cli.app import AgentZeroCLI
@@ -207,27 +209,57 @@ async def cmd_models(app: AgentZeroCLI, *, focus_target: str = "main") -> None:
         app._show_notice(availability.reason or "Model runtime editing is unavailable.", error=True)
         return
 
+    override = switcher_payload.get("override") if isinstance(switcher_payload.get("override"), dict) else {}
+    preset_name = str(
+        switcher_payload.get("effective_preset")
+        or override.get("preset_name")
+        or switcher_payload.get("configured_preset")
+        or "Default"
+    ).strip()
     presets = switcher_payload.get("presets")
-    default_preset = next(
+    selected_preset = next(
         (
             preset
             for preset in presets
             if isinstance(preset, dict)
-            and str(preset.get("name") or "").strip().casefold() == "default"
+            and str(preset.get("name") or "").strip().casefold() == preset_name.casefold()
         ),
         None,
     ) if isinstance(presets, list) else None
-    if not isinstance(default_preset, dict):
-        app._show_notice("Agent Zero did not provide its Default model preset.", error=True)
+    if not isinstance(selected_preset, dict):
+        app._show_notice(f"Agent Zero did not provide model preset '{preset_name}'.", error=True)
         return
 
-    main_model = coerce_model_config(default_preset.get("chat"))
-    utility_model = coerce_model_config(default_preset.get("utility"))
+    preset_name = str(selected_preset["name"])
+    main_model = {
+        **coerce_model_config(selected_preset.get("chat")),
+        **coerce_model_config(override_main_model(override)),
+        **coerce_model_config(switcher_payload.get("main_model")),
+    }
+    utility_model = {
+        **coerce_model_config(selected_preset.get("utility")),
+        **coerce_model_config(override.get("utility")),
+        **coerce_model_config(switcher_payload.get("utility_model")),
+    }
+    default_preset = next(
+        (item for item in presets if isinstance(item, dict) and item.get("name") == "Default"),
+        {},
+    )
+    supports_vision = True
+    for source in (
+        default_preset.get("chat"), selected_preset.get("chat"),
+        override_main_model(override), switcher_payload.get("main_model"),
+    ):
+        if "vision" in as_mapping(source):
+            supports_vision = coerce_bool(source["vision"])
 
     result = await app.push_screen_wait(
         ModelRuntimeScreen(
+            preset_name=preset_name,
             main_model=main_model,
             utility_model=utility_model,
+            supports_vision=supports_vision,
+            vision_model=as_mapping(selected_preset.get("vision")),
             focus_target=focus_target,
             provider_options=collect_provider_options(switcher_payload),
         )
@@ -237,45 +269,55 @@ async def cmd_models(app: AgentZeroCLI, *, focus_target: str = "main") -> None:
     if not isinstance(result, ModelRuntimeResult):
         raise TypeError(f"Unexpected model runtime result: {result!r}")
 
-    if not result.main_changed and not result.utility_changed:
+    if not result.main_changed and not result.utility_changed and result.main_vision is None and result.vision_model is None:
         return
 
     presets_to_save = deepcopy(presets)
-    default_to_save = next(
+    preset_to_save = next(
         preset
         for preset in presets_to_save
         if isinstance(preset, dict)
-        and str(preset.get("name") or "").strip().casefold() == "default"
+        and preset.get("name") == preset_name
     )
     for slot, model, changed in (
         ("chat", result.main_model, result.main_changed),
         ("utility", result.utility_model, result.utility_changed),
+        ("vision", result.vision_model, result.vision_model is not None),
     ):
         if not changed:
             continue
-        current = default_to_save.get(slot)
+        if slot == "vision" and not model:
+            preset_to_save[slot] = {}
+            continue
+        current = preset_to_save.get(slot)
         updated = dict(current) if isinstance(current, dict) else {}
+        updated.pop("api_base", None)
+        updated.pop("base_url", None)
         if str(updated.get("provider") or "").strip().casefold() != str(
             model.get("provider") or ""
         ).strip().casefold():
-            updated.pop("api_base", None)
             updated.pop("kwargs", None)
         updated.update(model)
-        default_to_save[slot] = updated
+        preset_to_save[slot] = updated
+    if result.main_vision is not None:
+        preset_to_save["chat"] = {
+            **as_mapping(preset_to_save.get("chat")), **result.main_model,
+            "vision": result.main_vision,
+        }
 
     try:
         saved = await app.client.save_model_presets(presets_to_save)
     except Exception as exc:
-        app._show_notice(f"Failed to update the Default model preset: {exc}", error=True)
+        app._show_notice(f"Failed to update model preset '{preset_name}': {exc}", error=True)
         return
     if not saved.get("ok"):
-        app._show_notice(str(saved.get("message") or "Failed to update the Default model preset."), error=True)
+        app._show_notice(str(saved.get("message") or f"Failed to update model preset '{preset_name}'."), error=True)
         return
 
     try:
-        payload = await app.client.set_model_preset(context_id, None)
+        payload = await app.client.set_model_preset(context_id, preset_name)
     except Exception as exc:
-        app._show_notice(f"Default model preset saved, but failed to clear this chat override: {exc}", error=True)
+        app._show_notice(f"Model preset '{preset_name}' saved, but failed to activate it: {exc}", error=True)
         return
 
     await _apply_model_switcher_payload(app, payload, optimistic=True)

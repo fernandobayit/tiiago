@@ -1676,6 +1676,16 @@ async def test_http_upload_download_chunk_boundary_matrix(
     assert list(tmp_path.glob(".partial-*")) == []
 
 
+async def test_send_hello_explains_an_empty_acknowledgement_timeout() -> None:
+    client = A0Client("http://127.0.0.1:50001")
+    client.sio.call = AsyncMock(side_effect=socketio.exceptions.TimeoutError())
+    try:
+        with pytest.raises(A0WebSocketConnectionError, match="acknowledge the connector handshake"):
+            await client.send_hello()
+    finally:
+        await client.disconnect()
+
+
 async def test_send_hello_returns_exec_config_payload() -> None:
     client = A0Client("http://127.0.0.1:50001")
     client.sio = FakeSocketIOClient(

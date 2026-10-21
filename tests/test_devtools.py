@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -62,3 +63,56 @@ def test_snapshot_uses_forced_halfcell_renderer(monkeypatch: pytest.MonkeyPatch)
 
     assert renderer.mode == "halfcell"
     assert isinstance(widget, HalfcellImage)
+
+
+@pytest.mark.parametrize(
+    "check,upgrade,changed",
+    [(False, False, False), (False, True, True), (True, False, False), (True, False, True)],
+)
+def test_dependency_lock_preserves_pins_and_checks_without_writing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check: bool, upgrade: bool, changed: bool
+) -> None:
+    lock = _load_module("lock_dependencies", "devtools/lock_dependencies.py")
+    monkeypatch.setattr(lock, "ROOT", tmp_path)
+    originals = {}
+    for name in ("RUNTIME_IN", "BUILD_IN", "RUNTIME_LOCK", "BUILD_LOCK", "PYPROJECT"):
+        path = tmp_path / getattr(lock, name).relative_to(ROOT)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = "example==1.0\n"
+        if name == "PYPROJECT":
+            text = lock._sync_pyproject(
+                "[build-system]\nrequires = []\n[project]\ndependencies = []\n",
+                runtime_requirements=["example==1.0"],
+                build_requirements=["example==1.0"],
+            )
+        path.write_text(text, encoding="utf-8")
+        originals[path] = text
+        monkeypatch.setattr(lock, name, path)
+
+    calls = []
+
+    def compile_locked(command, **kwargs):
+        assert ("--upgrade" in command) == upgrade
+        output = Path(command[command.index("-o") + 1])
+        if not output.is_absolute():
+            output = kwargs["cwd"] / output
+        assert output.read_text(encoding="utf-8") == "example==1.0\n"
+        if changed:
+            output.write_text("example==2.0\n", encoding="utf-8")
+        calls.append(output)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(lock.subprocess, "run", compile_locked)
+    monkeypatch.setattr(
+        lock.sys,
+        "argv",
+        ["lock_dependencies.py", *(["--check"] if check else []), *(["--upgrade"] if upgrade else [])],
+    )
+
+    assert lock.main() == int(check and changed)
+    assert len(calls) == 2
+    if check:
+        assert all(path.read_text(encoding="utf-8") == text for path, text in originals.items())
+    else:
+        expected = "example==2.0" if changed else "example==1.0"
+        assert lock.PYPROJECT.read_text(encoding="utf-8").count(expected) == 2

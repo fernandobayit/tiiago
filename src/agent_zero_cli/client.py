@@ -35,6 +35,9 @@ _SOCKET_IO_PATH = "/socket.io"
 WS_NAMESPACE = "/ws"
 WS_HANDLER = "plugins/_a0_connector/ws_connector"
 
+# Bounded fast retries before the steady reconnect cadence takes over.
+RECOVERY_DELAYS_SECONDS = (1.0, 2.0, 5.0, 10.0, 20.0)
+
 _EVENT_HELLO = "connector_hello"
 _EVENT_SUBSCRIBE = "connector_subscribe_context"
 _EVENT_UNSUBSCRIBE = "connector_unsubscribe_context"
@@ -88,6 +91,10 @@ _TLS_CERTIFICATE_ERROR_MARKERS = (
     "unable to get local issuer certificate",
     "self-signed certificate",
 )
+
+
+def normalize_host(host: str) -> str:
+    return str(host or "").strip() or DEFAULT_HOST
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -1662,7 +1669,12 @@ class A0Client:
             payload["remote_exec"] = dict(remote_exec)
         if isinstance(gateway, dict):
             payload["gateway"] = dict(gateway)
-        result = await self._call(_EVENT_HELLO, payload)
+        try:
+            result = await self._call(_EVENT_HELLO, payload)
+        except socketio.exceptions.TimeoutError as exc:
+            raise A0WebSocketConnectionError(
+                "Timed out waiting for Agent Zero to acknowledge the connector handshake."
+            ) from exc
         capabilities = result.get("capabilities")
         if isinstance(capabilities, dict):
             self.peer_ws_max_payload_bytes = _peer_ws_max_payload_bytes(

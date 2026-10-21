@@ -201,8 +201,8 @@ def test_backend_packages_keep_release_names_and_modules() -> None:
 def test_readme_documents_uv_managed_python_and_git_install() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     compact = " ".join(readme.split())
-    assert "raw.githubusercontent.com/fernandobayit/tiiago-connector/main/install.sh" in compact
-    assert "raw.githubusercontent.com/fernandobayit/tiiago-connector/main/install.ps1" in compact
+    assert "raw.githubusercontent.com/fernandobayit/tiiago/main/install.sh" in compact
+    assert "raw.githubusercontent.com/fernandobayit/tiiago/main/install.ps1" in compact
     assert "resolve the latest published GitHub release at runtime" in compact
     assert "refs/tags/v1.6.zip" not in compact
     assert "Computer-use backends are embedded in the `tiiago` wheel" in compact

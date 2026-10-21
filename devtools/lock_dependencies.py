@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,13 +26,21 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero if generated lock metadata would change.",
     )
+    parser.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Upgrade all dependencies instead of preserving compatible locked versions.",
+    )
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="a0-lock-check-") if args.check else _null_tempdir() as temp_dir:
         runtime_lock = Path(temp_dir) / RUNTIME_LOCK.name if args.check else RUNTIME_LOCK
         build_lock = Path(temp_dir) / BUILD_LOCK.name if args.check else BUILD_LOCK
-        runtime_text = _compile_requirements(RUNTIME_IN, runtime_lock)
-        build_text = _compile_requirements(BUILD_IN, build_lock)
+        if args.check:
+            shutil.copyfile(RUNTIME_LOCK, runtime_lock)
+            shutil.copyfile(BUILD_LOCK, build_lock)
+        runtime_text = _compile_requirements(RUNTIME_IN, runtime_lock, upgrade=args.upgrade)
+        build_text = _compile_requirements(BUILD_IN, build_lock, upgrade=args.upgrade)
         pyproject_text = PYPROJECT.read_text(encoding="utf-8")
         updated = _sync_pyproject(
             pyproject_text,
@@ -53,7 +62,7 @@ def main() -> int:
     return 0
 
 
-def _compile_requirements(source: Path, output: Path) -> str:
+def _compile_requirements(source: Path, output: Path, *, upgrade: bool = False) -> str:
     output.parent.mkdir(parents=True, exist_ok=True)
     result = subprocess.run(
         [
@@ -65,7 +74,7 @@ def _compile_requirements(source: Path, output: Path) -> str:
             "--python-version",
             "3.10",
             "--generate-hashes",
-            "--upgrade",
+            *(["--upgrade"] if upgrade else []),
             "--custom-compile-command",
             "python devtools/lock_dependencies.py",
             "-o",

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Apply the TI•IA•GO brand layer on top of upstream a0-connector sources.
 
-This fork (fernandobayit/tiiago-connector) tracks upstream agent0ai/a0-connector.
-Upstream merges land on ``main`` through ``.github/workflows/sync-upstream.yml``,
-which re-runs this script afterwards. Everything in the brand layer is:
+This fork (fernandobayit/tiiago) tracks upstream agent0ai/a0-connector.
+Upstream merges are applied manually (the fork removed ``.github``),
+re-run this script afterwards. Everything in the brand layer is:
 
 - **Cosmetic or additive**: package/CLI rename, titles, URLs, docs, tests.
 - **Idempotent**: safe to run repeatedly; every edit is a no-op once applied.
@@ -29,7 +29,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRAND = "TI•IA•GO"
 CLI_NAME = "tiiago"
-FORK_REPO = "fernandobayit/tiiago-connector"
+FORK_REPO = "fernandobayit/tiiago"
 UPSTREAM_REPO = "agent0ai/a0-connector"
 
 FORK_URL = f"https://github.com/{FORK_REPO}"
@@ -213,10 +213,8 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
         (
             "def autoconnect_default_enabled() -> bool:\n"
             '    """Auto-connect the configured host on startup unless TIIAGO_AUTOCONNECT disables it."""\n'
-            "    return _parse_bool(\n"
-            "        os.environ.get(_AUTOCONNECT_KEY, _read_dotenv().get(_AUTOCONNECT_KEY, \"\")),\n"
-            "        default=True,\n"
-            "    )\n"
+            '    raw = os.environ.get(_AUTOCONNECT_KEY, _read_dotenv().get(_AUTOCONNECT_KEY, ""))\n'
+            "    return coerce_bool(raw if raw.strip() else None, default=True)\n"
             "\n"
             "\n"
             "def load_config() -> CLIConfig:"
@@ -263,8 +261,8 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
     # --- pyproject.toml: distribution identity --------------------------------
     (
         "src/agent_zero_cli/__init__.py",
-        '__version__ = "2.13.2"',
-        '__version__ = "2.13.3"',
+        '__version__ = "2.14"',
+        '__version__ = "2.14.1"',
         1,
     ),
     # --- docs/configuration.md: default column for the toggles ------------------
@@ -894,8 +892,8 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
 AGENTS_BRAND_SECTION = """
 ## TI•IA•GO Brand Layer
 
-- This fork applies a mechanical brand layer on top of upstream: package/CLI name `tiiago` (alias `a0` kept), `TI•IA•GO` titles, URLs pointing at `fernandobayit/tiiago-connector`.
-- The layer lives in `devtools/apply_tiiago_brand.py` and is re-applied by `.github/workflows/sync-upstream.yml` after every upstream merge; run it manually with `python3 devtools/apply_tiiago_brand.py`.
+- This fork applies a mechanical brand layer on top of upstream: package/CLI name `tiiago` (alias `a0` kept), `TI•IA•GO` titles, URLs pointing at `fernandobayit/tiiago`.
+- The layer lives in `devtools/apply_tiiago_brand.py` run it manually after every upstream merge with `python3 devtools/apply_tiiago_brand.py`.
 - Do NOT rename shared protocol identifiers: plugin `_a0_connector`, protocol `a0-connector.v1`, `/api/plugins/_a0_connector/v1/` routes, `A0_*`/`AGENT_ZERO_*` env vars, `constraints/a0-*.txt` paths, or the `agent_zero_cli` package. They are the contract with Agent Zero Core.
 - Fork-only additions: `DEFAULT_HOST` compiled to `https://a0.bayit.me` (client.py), `TIIAGO_DEFAULT_HOST` (host fallback override), and `TIIAGO_AUTOCONNECT` (auto-connect on startup, default ON; set `=0` to disable). Auto-connect lands on the login panel when no saved session exists.
 """

@@ -15,9 +15,6 @@ import pytest
 from agent_zero_cli import self_update
 
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
 class _FakeDistribution:
     def __init__(self, direct_url_text: str | None) -> None:
         self._direct_url_text = direct_url_text
@@ -43,9 +40,7 @@ class _FakeReleaseResponse:
 
 @contextmanager
 def _workspace_temp_dir() -> Path:
-    base_dir = ROOT / ".tmp-tests"
-    base_dir.mkdir(exist_ok=True)
-    temp_dir = Path(tempfile.mkdtemp(dir=base_dir))
+    temp_dir = Path(tempfile.mkdtemp())
     try:
         yield temp_dir
     finally:
@@ -65,7 +60,7 @@ def test_resolve_package_spec_defaults_to_latest_release() -> None:
     )
 
     assert package_spec == (
-        "tiiago @ https://github.com/fernandobayit/tiiago-connector/archive/refs/tags/v9.8.zip"
+        "tiiago @ https://github.com/fernandobayit/tiiago/archive/refs/tags/v9.8.zip"
     )
 
 
@@ -110,15 +105,15 @@ def test_resolve_update_target_defaults_to_release_locks() -> None:
 
     assert target == self_update.UpdateTarget(
         package_spec=(
-            "tiiago @ https://github.com/fernandobayit/tiiago-connector/archive/refs/tags/v9.8.zip"
+            "tiiago @ https://github.com/fernandobayit/tiiago/archive/refs/tags/v9.8.zip"
         ),
         python_spec=self_update.DEFAULT_PYTHON_SPEC,
         runtime_constraints=(
-            "https://raw.githubusercontent.com/fernandobayit/tiiago-connector/"
+            "https://raw.githubusercontent.com/fernandobayit/tiiago/"
             "refs/tags/v9.8/constraints/a0-runtime.txt"
         ),
         build_constraints=(
-            "https://raw.githubusercontent.com/fernandobayit/tiiago-connector/"
+            "https://raw.githubusercontent.com/fernandobayit/tiiago/"
             "refs/tags/v9.8/constraints/a0-build.txt"
         ),
     )

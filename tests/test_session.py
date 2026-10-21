@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -448,6 +450,63 @@ async def test_tools_only_gateway_reconnects_without_context(
     assert client.subscribe_calls == []
     assert len(client.hello_calls) >= 3
     await session.close()
+
+
+@pytest.mark.parametrize("reconnect", [False, True])
+@pytest.mark.parametrize("fail", [False, True])
+async def test_gateway_waits_for_handshake_before_reporting_connected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reconnect: bool, fail: bool,
+) -> None:
+    monkeypatch.setattr("agent_zero_cli.session._RECOVERY_DELAYS_SECONDS", (0.0,))
+    entered, release = asyncio.Event(), asyncio.Event()
+    states: list[str] = []
+
+    class WaitingClient(GatewayFakeClient):
+        wait_for_hello = not reconnect
+
+        async def send_hello(self, **payload: Any) -> dict[str, Any]:
+            if self.wait_for_hello:
+                entered.set()
+                await release.wait()
+                if fail:
+                    raise RuntimeError("Handshake failed")
+            return await super().send_hello(**payload)
+
+    session = ConnectorSession(
+        CLIConfig(), Observer(), workspace=tmp_path, client_factory=WaitingClient,
+        tools_only=True, gateway={"id": "launcher-test", "scopes": {"files": True}},
+        on_gateway_state_change=lambda metadata: states.append(metadata["state"]),
+    )
+    if reconnect:
+        await session.connect("http://agent.test")
+        states.clear()
+        client = FakeClient.instances[-1]
+        client.wait_for_hello = True
+        client.connected = False
+        session._handle_disconnect()
+        task = session._recovery_task
+    else:
+        task = asyncio.create_task(session.connect("http://agent.test"))
+    assert task is not None
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        assert session.connected is False
+        assert "connected" not in states
+        release.set()
+        if fail and not reconnect:
+            with pytest.raises(SessionError, match="Handshake failed"):
+                await task
+        else:
+            await task
+        assert session.connected is (not fail)
+        assert ("connected" in states) is (not fail)
+        if not fail:
+            assert FakeClient.instances[-1].hello_calls[-1]["gateway"]["state"] == "connected"
+    finally:
+        release.set()
+        with contextlib.suppress(SessionError):
+            await task
+        await session.close()
 
 
 async def test_tools_only_gateway_requires_both_core_features(tmp_path: Path) -> None:

@@ -2,12 +2,12 @@
 
 set -eu
 
-LATEST_RELEASE_API_URL="${A0_LATEST_RELEASE_API_URL:-https://api.github.com/repos/fernandobayit/tiiago-connector/releases/latest}"
+LATEST_RELEASE_API_URL="${A0_LATEST_RELEASE_API_URL:-https://api.github.com/repos/fernandobayit/tiiago/releases/latest}"
 PYTHON_SPEC="${A0_PYTHON_SPEC:-3.12}"
 UV_INSTALL_URL="${UV_INSTALL_URL:-https://astral.sh/uv/install.sh}"
 RUNTIME_CONSTRAINTS_PATH="constraints/a0-runtime.txt"
 BUILD_CONSTRAINTS_PATH="constraints/a0-build.txt"
-RELEASE_RAW_FILE_URL_BASE="https://raw.githubusercontent.com/fernandobayit/tiiago-connector/refs/tags"
+RELEASE_RAW_FILE_URL_BASE="https://raw.githubusercontent.com/fernandobayit/tiiago/refs/tags"
 
 have_cmd() {
     command -v "$1" >/dev/null 2>&1
@@ -102,7 +102,7 @@ resolve_release_target() {
     fi
 
     RELEASE_TAG="$(fetch_latest_release_tag)"
-    PACKAGE_SPEC="tiiago @ https://github.com/fernandobayit/tiiago-connector/archive/refs/tags/$RELEASE_TAG.zip"
+    PACKAGE_SPEC="tiiago @ https://github.com/fernandobayit/tiiago/archive/refs/tags/$RELEASE_TAG.zip"
 }
 
 resolve_constraints() {
