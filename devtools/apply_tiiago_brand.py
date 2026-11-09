@@ -261,8 +261,14 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
     # --- pyproject.toml: distribution identity --------------------------------
     (
         "src/agent_zero_cli/__init__.py",
-        '__version__ = "2.14"',
-        '__version__ = "2.14.1"',
+        '__version__ = "2.15"',
+        '__version__ = "2.15.1"',
+        1,
+    ),
+    (
+        "pyproject.toml",
+        'version = "2.15"',
+        'version = "2.15.1"',
         1,
     ),
     # --- docs/configuration.md: default column for the toggles ------------------
@@ -275,28 +281,42 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
         ),
         1,
     ),
-    # --- chat_log.py: TI•IA•GO intro banner -------------------------------------
+    # --- chat_log.py: TI-I-A-GO intro banner (2.15+ tuple logo format) ------
     (
         "src/agent_zero_cli/widgets/chat_log.py",
         (
-            '_AGENT_ZERO_BANNER = """ █████╗   ██████╗ ███████╗███╗   ██╗████████╗   ███████╗███████╗██████╗  ██████╗\n'
-            '██╔══██╗ ██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝   ╚══███╔╝██╔════╝██╔══██╗██╔═══██╗\n'
-            '███████║ ██║  ███╗█████╗  ██╔██╗ ██║   ██║        ███╔╝ █████╗  ██████╔╝██║   ██║\n'
-            '██╔══██║ ██║   ██║██╔══╝  ██║╚██╗██║   ██║       ███╔╝  ██╔══╝  ██╔══██╗██║   ██║\n'
-            '██║  ██║ ╚██████╔╝███████╗██║ ╚████║   ██║      ███████╗███████╗██║  ██║╚██████╔╝\n'
-            '╚═╝  ╚═╝  ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝      ╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝"""\n'
-            '_AGENT_ZERO_BANNER_COMPACT = "Agent Zero"\n'
-            '_AGENT_ZERO_BANNER_TINY = "A0"'
+            '_AGENT_ZERO_BANNER = (\n'
+            '    "              ▄▀▀▀▄ ▄▀▀▀▀ ▄▀▀▀▀ ▀▄  ▄ ▀▀█▀▀\\n"\n'
+            '    "     ▄█▄      ▄▀▀▀█ ▄ ▀▀█ █▀▀ ▄ █ ▀▄█   █\\n"\n'
+            '    "   ▄█▀ ▀█▄    ▀   ▀  ▀▀▀▀  ▀▀▀▀ ▀   ▀   ▀\\n"\n'
+            '    " ▄█▀     ▀█▄     ▀▀▀▀▄ ▄▀▀▀▀ █▀▀▀▄ ▄▀▀▀▄\\n"\n'
+            '    "▀▀  ▀▀▀▀▀  ▀▀     ▄▀▀  █▀▀   █▀▀▀▄ █   █\\n"\n'
+            '    "                 ▀▀▀▀▀  ▀▀▀▀ ▀   ▀  ▀▀▀"\n'
+            ')\n'
+            '_AGENT_ZERO_BANNER_COMPACT = (\n'
+            '    "      ▄\\n"\n'
+            '    "    ▄█▀█▄\\n"\n'
+            '    "  ▄█▀   ▀█▄\\n"\n'
+            '    "▄█▀ ▄▄▄▄▄ ▀█▄"\n'
+            ')\n'
+            ''
         ),
         (
-            '_AGENT_ZERO_BANNER = """████████╗  ██╗   ▄▄▄    ██╗  █████╗    ▄▄▄    ██████╗   ██████╗\n'
-            '╚══██╔══╝  ██║  ▐███▌   ██║ ██╔══██╗  ▐███▌  ██╔════╝  ██╔═══██╗\n'
-            '   ██║     ██║ ▐█████▌  ██║ ███████║ ▐█████▌ ██║  ███╗ ██║   ██║\n'
-            '   ██║     ██║  ▐███▌   ██║ ██╔══██║  ▐███▌  ██║   ██║ ██║   ██║\n'
-            '   ██║     ██║   ▀▀▀    ██║ ██║  ██║   ▀▀▀   ╚██████╔╝ ╚██████╔╝\n'
-            '   ╚═╝     ╚═╝          ╚═╝ ╚═╝  ╚═╝          ╚═════╝   ╚═════╝"""\n'
-            '_AGENT_ZERO_BANNER_COMPACT = "TI•IA•GO"\n'
-            '_AGENT_ZERO_BANNER_TINY = "TI"'
+            '_AGENT_ZERO_BANNER = (\n'
+            '    "████████╗  ██╗   ▄▄▄    ██╗  █████╗    ▄▄▄    ██████╗   ██████╗\\n"\n'
+            '    "╚══██╔══╝  ██║  ▐███▌   ██║ ██╔══██╗  ▐███▌  ██╔════╝  ██╔═══██╗\\n"\n'
+            '    "   ██║     ██║ ▐█████▌  ██║ ███████║ ▐█████▌ ██║  ███╗ ██║   ██║\\n"\n'
+            '    "   ██║     ██║  ▐███▌   ██║ ██╔══██║  ▐███▌  ██║   ██║ ██║   ██║\\n"\n'
+            '    "   ██║     ██║   ▀▀▀    ██║ ██║  ██║   ▀▀▀   ╚██████╔╝ ╚██████╔╝\\n"\n'
+            '    "   ╚═╝     ╚═╝          ╚═╝ ╚═╝  ╚═╝          ╚═════╝   ╚═════╝"\n'
+            ')\n'
+            '_AGENT_ZERO_BANNER_COMPACT = (\n'
+            '    "      ▄\\n"\n'
+            '    "    ▄█▀█▄\\n"\n'
+            '    "  ▄█▀   ▀█▄\\n"\n'
+            '    "▄█▀ ▄▄▄▄▄ ▀█▄"\n'
+            ')\n'
+            ''
         ),
         1,
     ),
@@ -363,43 +383,6 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
             "        if not self._password.has_focus and self._password.value != password:\n"
             "            self._password.value = password\n"
             "        self._remember_host.value = remember_host"
-        ),
-        1,
-    ),
-    (
-        "src/agent_zero_cli/widgets/splash_view.py",
-        (
-            "    def set_state(self, state: SplashState) -> None:\n"
-            "        self._state = state\n"
-            "        if self.is_mounted:\n"
-            "            self._sync_state()\n"
-            "            if state.stage in {\"host\", \"login\", \"error\"}:\n"
-            "                self.focus_primary()"
-        ),
-        (
-            "    def set_state(self, state: SplashState) -> None:\n"
-            "        stage_changed = state.stage != self._state.stage\n"
-            "        self._state = state\n"
-            "        if self.is_mounted:\n"
-            "            self._sync_state()\n"
-            "            if state.stage in {\"host\", \"login\", \"error\"} and (\n"
-            "                stage_changed or not self._splash_owns_focus()\n"
-            "            ):\n"
-            "                self.focus_primary()\n"
-            "\n"
-            "    def _splash_owns_focus(self) -> bool:\n"
-            "        focused = getattr(self, \"app\", None)\n"
-            "        focused = focused.focused if focused is not None else None\n"
-            "        if focused is None or focused is self:\n"
-            "            # No widget or only the splash container holds focus: re-apply the\n"
-            "            # primary focus so a real input gets the keyboard.\n"
-            "            return False\n"
-            "        focused = focused.parent\n"
-            "        while focused is not None:\n"
-            "            if focused is self:\n"
-            "                return True\n"
-            "            focused = focused.parent\n"
-            "        return False"
         ),
         1,
     ),
@@ -483,30 +466,6 @@ PATCHES: list[tuple[str, str, str, int | None]] = [
         1,
     ),
     # --- splash_view.py: user-visible strings ----------------------------------
-    (
-        "src/agent_zero_cli/widgets/splash_view.py",
-        'Static("Local Agent Zero instances", classes="splash-panel-title")',
-        f'Static("Local {BRAND} instances", classes="splash-panel-title")',
-        1,
-    ),
-    (
-        "src/agent_zero_cli/widgets/splash_view.py",
-        '"Detected Agent Zero WebUI endpoints. Manual URL entry is available below.",',
-        f'"Detected {BRAND} WebUI endpoints. Manual URL entry is available below.",',
-        1,
-    ),
-    (
-        "src/agent_zero_cli/widgets/splash_view.py",
-        '"Use this for remote Agent Zero hosts or anything Docker cannot see. Standard ports are optional.",',
-        f'"Use this for remote {BRAND} hosts or anything Docker cannot see. Standard ports are optional.",',
-        1,
-    ),
-    (
-        "src/agent_zero_cli/widgets/splash_view.py",
-        'return Text("Checking Docker for local Agent Zero instances...", style="#9aa7b4")',
-        f'return Text("Checking Docker for local {BRAND} instances...", style="#9aa7b4")',
-        1,
-    ),
     (
         "src/agent_zero_cli/widgets/splash_view.py",
         'return Text(f"{message} Install Agent Zero: http://agent-zero.ai", style="#9aa7b4")',
@@ -893,9 +852,13 @@ AGENTS_BRAND_SECTION = """
 ## TI•IA•GO Brand Layer
 
 - This fork applies a mechanical brand layer on top of upstream: package/CLI name `tiiago` (alias `a0` kept), `TI•IA•GO` titles, URLs pointing at `fernandobayit/tiiago`.
-- The layer lives in `devtools/apply_tiiago_brand.py` run it manually after every upstream merge with `python3 devtools/apply_tiiago_brand.py`.
+- The layer lives in `devtools/apply_tiiago_brand.py`; run it manually after every upstream merge with `python3 devtools/apply_tiiago_brand.py` (`--check` previews drift).
 - Do NOT rename shared protocol identifiers: plugin `_a0_connector`, protocol `a0-connector.v1`, `/api/plugins/_a0_connector/v1/` routes, `A0_*`/`AGENT_ZERO_*` env vars, `constraints/a0-*.txt` paths, or the `agent_zero_cli` package. They are the contract with Agent Zero Core.
 - Fork-only additions: `DEFAULT_HOST` compiled to `https://a0.bayit.me` (client.py), `TIIAGO_DEFAULT_HOST` (host fallback override), and `TIIAGO_AUTOCONNECT` (auto-connect on startup, default ON; set `=0` to disable). Auto-connect lands on the login panel when no saved session exists.
+- Fork-only defaults: remote exec (`AGENT_ZERO_REMOTE_EXEC_ENABLED` / `A0_REMOTE_EXEC`) and local Computer Use (`AGENT_ZERO_COMPUTER_USE_ENABLED`, trust mode `allow`) ship enabled on first run. Startup teardown must not rewrite persisted enablement; toggles and explicit opt-outs (`=0`) stay authoritative. Enforced by brand patches on `config.py`, `computer_use.py`, and `docs/configuration.md`.
+- Fork-only intro banner: the splash hero and chat-log intro share the brand logo. The full logo renders `TI•IA•GO` block lettering (six rows, 64 cells); below its width the logo collapses to the upstream four-row, 13-cell symbol alone, and it hides when even that symbol cannot fit. Internal identifiers stay upstream-named. Enforced by a brand patch on `src/agent_zero_cli/widgets/chat_log.py`.
+- Fork version numbering: upstream `X.Y` becomes fork `X.Y.1`, applied to `pyproject.toml` and `src/agent_zero_cli/__init__.py` through brand patches during each post-merge rebrand.
+- Login focus behavior (typed credentials preserved, background discovery never fights the splash, focus kept inside the splash subtree, `LoginFieldsChanged` propagation) was adopted upstream in 2.15; the brand layer no longer patches it.
 """
 
 README_UPSTREAM_SECTION = """

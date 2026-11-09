@@ -288,7 +288,7 @@ class SplashHostPanel(Vertical):
             return ""
         if status == "empty":
             message = detail or "No local Agent Zero Docker instances were found."
-            return Text(f"{message} Install Agent Zero: http://agent-zero.ai", style="#9aa7b4")
+            return Text(f"{message} TI•IA•GO runs on Agent Zero — install it from http://agent-zero.ai", style="#9aa7b4")
         if status == "unavailable":
             return Text(detail or "Docker is unavailable. Enter a URL manually.", style="#f0b54d")
         return Text(detail or "Docker discovery failed. Enter a URL manually.", style="#ff8b6b")
@@ -390,7 +390,7 @@ class SplashLoginPanel(Vertical):
         self._login_error = ""
         self._title = Static("Ready to login", classes="splash-panel-title")
         self._copy = Static(
-            "Sign in to the Agent Zero instance below.",
+            "Sign in to the TI•IA•GO instance below.",
             classes="splash-panel-copy",
         )
         self._target_summary = Static("", id="splash-login-target-summary")
@@ -417,8 +417,12 @@ class SplashLoginPanel(Vertical):
         self._render_target_context()
 
     def set_credentials(self, username: str = "", password: str = "", *, remember_host: bool = False) -> None:
-        self._username.value = username
-        self._password.value = password
+        # Never clobber a login field the user is editing: background state
+        # syncs must not erase typed credentials or move the caret.
+        if not self._username.has_focus and self._username.value != username:
+            self._username.value = username
+        if not self._password.has_focus and self._password.value != password:
+            self._password.value = password
         self._remember_host.value = remember_host
 
     def _safe_focus(self, widget: Input) -> None:
@@ -478,9 +482,9 @@ class SplashLoginPanel(Vertical):
             )
 
         copy_text = (
-            "Use the same username and password you use in the Agent Zero Web UI."
+            "Use the same username and password you use in the TI•IA•GO Web UI."
             if self._target_detected_label
-            else "Login with the Agent Zero endpoint below."
+            else "Login with the TI•IA•GO endpoint below."
         )
         self._safe_update(self._copy, copy_text)
         self._safe_update(self._target_summary, summary)
@@ -715,6 +719,12 @@ class SplashView(VerticalScroll):
             super().__init__()
             self.remember_host = remember_host
 
+    class LoginFieldsChanged(Message):
+        def __init__(self, *, username: str, password: str) -> None:
+            super().__init__()
+            self.username = username
+            self.password = password
+
     def __init__(self) -> None:
         super().__init__(id="splash-view")
         self._hero = build_agent_zero_banner_widget(id="splash-hero")
@@ -929,6 +939,14 @@ class SplashView(VerticalScroll):
             if self._is_login_state_sync_event(event):
                 return
             self._login_panel.clear_error()
+            # Propagate typed credentials so background state syncs cannot
+            # clear the field the user just left.
+            self.post_message(
+                self.LoginFieldsChanged(
+                    username=self._login_panel.username,
+                    password=self._login_panel.password,
+                )
+            )
 
     def on_checkbox_changed(self, event: Checkbox.Changed) -> None:
         checkbox_id = event.checkbox.id or ""
