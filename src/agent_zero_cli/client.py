@@ -2027,6 +2027,17 @@ class A0Client:
         data = self._json(response)
         return data.get("contexts", data.get("chats", []))
 
+    async def search_chats(self, query: str) -> list[dict[str, Any]]:
+        response = await self._post("chats_list", {"query": query})
+        response.raise_for_status()
+        data = self._json(response)
+        if "matches" not in data:
+            raise A0ProtocolError("Update Agent Zero to search chat messages from the CLI.")
+        matches = data["matches"]
+        if not isinstance(matches, list) or any(not isinstance(match, dict) for match in matches):
+            raise A0ProtocolError("Invalid chat search response.")
+        return matches
+
     async def get_chat(self, context_id: str) -> dict[str, Any]:
         response = await self._post(
             "chat_get",
@@ -2406,6 +2417,23 @@ class A0Client:
         data = self._json(response)
         if "ok" not in data:
             data["ok"] = True
+        return data
+
+    async def composer_controls_action(
+        self, action: str, context_id: str, **payload: Any,
+    ) -> dict[str, Any]:
+        body = {"action": action, "context_id": context_id, **payload}
+        url = self._api_url("composer_controls")
+        response = await self.http.post(url, json=body, headers=await self._csrf_headers())
+        if response.status_code == 403:
+            self._csrf_token = None
+            response = await self.http.post(url, json=body, headers=await self._csrf_headers())
+        if self._is_login_redirect(response):
+            raise A0ProtocolError("Composer controls require an authenticated Agent Zero session.")
+        if response.status_code >= 400:
+            return {"ok": False, "status_code": response.status_code, "message": self._response_message(response)}
+        data = self._json(response)
+        data.setdefault("ok", True)
         return data
 
     async def get_model_switcher(self, context_id: str) -> dict[str, Any]:

@@ -16,14 +16,24 @@
 - `ChatInput` is the single source for composer behavior: Enter submits, `Ctrl+J` inserts a newline, `Ctrl+A` selects the full draft, history is scoped by chat context, `@` opens reference completion, and content grows to four lines before internal scrolling.
 - Reference completion inserts prompt text only: `@[./path]`, `@[./folder/]`, `@[/container/path]`, `@[agent/profile]`, `@[skill/name]`, or `@[mcp/server]`. It must not activate skills or delegate work.
 - Discovered host rows use Up/Down to move the active selection and Enter or Space to connect.
+- The splash uses a bounded, top-aligned column. Host rows lead with the friendly name and URL; Docker image details remain in a plain-text tooltip. Manual entry replaces the local list so the shared Connect action always follows the visible target. Keep validation neutral until a real connection succeeds.
+- Keep Refresh right-aligned on the host heading row, with one blank row below it. The manual-URL toggle follows the keyboard hint at the bottom of the host form. The splash does not display workspace paths; chat workspace context is unchanged.
+- The workspace line under the chat logo labels the local path "Host" and the remote Agent Zero path "Container".
+- Preserve selected-host styling when focus moves to another control. Reuse unchanged discovered rows and do not refocus on ordinary input/remember-host state echoes. Two hosts and manual entry must fit at 80×24 and 100×30 without outer scrolling.
+- Splash and initial chat share the approved compact triangle centered vertically beside AGENT/ZERO block lettering. Preserve its seven-half-row geometry within the lettering's eleven visible half-rows, leaving two half-rows above and below. Below the full logo's 43-cell width, use the user's four-row, 13-cell symbol alone, including its detached base. Hide branding only when even that symbol cannot fit; do not substitute a text wordmark. Select by available width, never viewport height.
+- Splash stage classes update in one atomic batch. Repeated state updates within the same stage must not remove/re-add the class and restyle the whole splash; preserve unrelated classes and continue refreshing panel contents.
 - In-input activity must use the WebUI-style `|>  ` placeholder prefix, add the `progress-active` class, and escape detail text before putting it into Rich/Textual markup.
 - `ChatInput.set_idle()` must clear activity state and restore the normal placeholder without losing attachment or queue placeholder state.
 - Do not reintroduce `ActivityBar` or `#status-bar`. Activity belongs in `#message-input`.
 - `ChatLog` status metadata must stay concise and must redact or summarize large/sensitive fields such as code, prompt text, stdout, stderr, markdown, HTML, and raw content. Media-bearing keys consumed by image extraction and direct `img://`, `data:image/`, or `/api/image_get` values must never render or enter transcript copy text.
 - A display-only clear may preserve the Agent Zero banner, workspace line, and sequence-1 assistant greeting; ordinary lifecycle clears remove every transcript and intro element.
 - Transcript renderable caches must use A0-owned attribute names and must not shadow Textual's internal widget render cache.
+- `SelectableStatic` measures Rich content at the width supplied by Textual's layout hooks, including the scrollbar gutter. Never query widget or parent geometry while measuring/rendering; that can re-enter the compositor. Reuse converted content until its width, source, or style changes.
+- `StatusEntry` builds its sanitized detail body when metadata changes. Shimmer frames only repaint the existing row without rebuilding details or requesting transcript layout; expanding, replacing, or updating content still requests layout.
+- `ChatLog` coalesces bottom-follow requests to one pending callback per refresh and checks auto-follow again when it executes.
 - Footer/command palette behavior must not duplicate the command palette entry. The `ctrl+p` binding remains `show=False` in `app.py`.
 - The compact model switcher bar shows the effective model pill without a `Main` role prefix. Its preset selector shows the effective preset and uses `Use preset from settings (<name>)` when a chat override can be cleared.
+- `ComposerControls` renders server-provided labels beside the model summary and posts control IDs/anchor IDs only. Reactive recomposition owns button replacement; hiding or clearing the model bar also clears its controls. Keep multiple controls keyboard-accessible in narrow bars.
 - Programmatic model-switcher refreshes must ignore queued stale `Select.Changed` events so they cannot reverse a user's preset choice.
 - `ProfileMenuPopover` may report `default` as current status but never renders it as a selectable or editable row. Its Create action remains available when no selectable profiles remain.
 - `ImageEntry` is a focusable, expandable rendering surface only. It posts load requests but performs no network I/O, copies the semantic `ImageReference.copy_text` placeholder rather than terminal output, turns native renderer failures into an unavailable state without a half-cell retry, and handles Textual prune before descendant removal so renderer controls are cleaned before its owned Pillow asset closes. Releasing a loading or rendered entry invalidates that generation before returning it to pending.
@@ -40,7 +50,7 @@
 
 ## Verification
 
-- `./.venv/bin/python -m pytest tests/test_chat_input.py tests/test_app.py tests/test_splash_view.py -v`
+- `./.venv/bin/python -m pytest tests/test_chat_log.py tests/test_chat_log_images.py tests/test_chat_input.py tests/test_app.py tests/test_splash_view.py -v`
 
 ## Child DOX Index
 

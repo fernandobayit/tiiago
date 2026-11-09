@@ -197,6 +197,7 @@ async def switch_context(app: AgentZeroCLI, context_id: str, *, has_messages_hin
     app._set_message_queue([])
     app._response_delivered = False
     app._context_run_complete = False
+    app._chat_intro_pending = True
     log = app.query_one("#chat-log", ChatLog)
     app.image_store.cancel_pending()
     log.clear()
@@ -246,7 +247,9 @@ async def cmd_chats(
 
     contexts = _sort_contexts(contexts, sort_by=sort_by)
 
-    result = await app.push_screen_wait(ChatListScreen(contexts))
+    if any(isinstance(screen, ChatListScreen) for screen in app.screen_stack):
+        return
+    result = await app.push_screen_wait(ChatListScreen(contexts, search=app.client.search_chats))
     if not result:
         return
 

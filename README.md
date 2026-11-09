@@ -2,6 +2,8 @@
 
 Terminal connector for [Agent Zero](https://github.com/frdel/agent-zero). It pairs a Textual CLI with a small Agent Zero plugin so you can chat from the terminal, follow streaming events, and use the connector-specific remote editing/runtime features.
 
+![Agent Zero CLI with its cyan logo, chat tabs, model controls, and message composer](docs/res/usage/a0-cli/a0-cli-start.png)
+
 ## Components
 
 | Component | Location | Purpose |
@@ -10,6 +12,8 @@ Terminal connector for [Agent Zero](https://github.com/frdel/agent-zero). It pai
 | Plugin (`_a0_connector`) | Agent Zero Core `plugins/_a0_connector` | Builtin plugin that exposes the connector HTTP + Socket.IO surface |
 
 The CLI requires an Agent Zero build that includes the builtin `_a0_connector` plugin.
+
+Core builds advertising `composer_controls` can supply plugin-defined controls beside the provider/model bar. The connector renders choice popovers with optional custom input; labels, values, defaults, validation, and persistence belong to the server. Escape or clicking outside cancels. Older Core builds and chats without controls keep the existing bar unchanged.
 
 ## Install
 
@@ -121,10 +125,12 @@ Active TUI and headless terminal sessions send one ready-for-input notification 
 
 | Shortcut | Action |
 |----------|--------|
-| `F6` | List chats |
+| `F6` | Search and resume chats |
 | `F7` | Nudge agent |
 | `F8` | Pause / resume |
 | `Ctrl+P` | Command palette |
+
+In **F6 Chats**, type in **Search** to find chat titles or message text. Matching messages show a short excerpt with the matching words emphasized. Up/Down and Enter resume a result while the search field stays focused; Ctrl+F returns to the field. Escape clears a search, then closes the panel. Message search requires a current Agent Zero Core; the query is temporary and respects the selected chat-list project filter and ordering.
 
 ### Slash commands
 
@@ -139,7 +145,7 @@ Active TUI and headless terminal sessions send one ready-for-input notification 
 | `/nudge` | Nudge the current agent run |
 | `/pause` / `/resume` | Pause or resume the active agent run |
 | `/presets` | Pick a model preset and inspect its vision routing |
-| `/models` | Edit Main, optional Vision sidecar, and Utility models in the active preset |
+| `/models` | Edit Main, optional Vision sidecar, and Utility models, including Main/Utility context windows |
 | `/profile` / `/profile <agent>` / `/profile "<name>" "<instructions>"` | Select, create, or edit the current agent profile |
 | `/permissions` | Edit Tools, MCP, and Skill permissions for the current agent |
 | `/computer-use on` / `/computer-use off` | Advertise or disable local Computer Use from this CLI; enabling arms the platform permission flow when needed |

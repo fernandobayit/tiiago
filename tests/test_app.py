@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from unittest.mock import AsyncMock
 from types import SimpleNamespace
 
 import pytest
@@ -243,6 +244,7 @@ class FakeSplash:
 
 class FakeConnectionStatus:
     def __init__(self) -> None:
+        self.display = True
         self.status = "disconnected"
         self.url = ""
         self.project_enabled = False
@@ -329,6 +331,10 @@ class FakeModelSwitcher:
         self.cleared = False
         self.classes: set[str] = set()
         self.state_calls: list[dict[str, object]] = []
+        self.composer_controls = []
+
+    def set_composer_controls(self, controls) -> None:
+        self.composer_controls = controls
 
     def clear(self) -> None:
         self.cleared = True
@@ -670,6 +676,7 @@ class ContextTabsRenderApp(App[None]):
 @pytest.fixture
 def dummy_app(monkeypatch: pytest.MonkeyPatch) -> DummyAgentZeroCLI:
     app = DummyAgentZeroCLI()
+    monkeypatch.setattr(app.client, "composer_controls_action", AsyncMock(return_value={}))
     app._computer_use = FakeComputerUseManager()
     app._host_browser = FakeHostBrowserManager()
     widgets = {
@@ -2265,6 +2272,37 @@ def test_message_queue_update_ignores_other_context(
     assert dummy_app.message_queue == []
 
 
+async def test_connection_header_is_hidden_while_choosing_a_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = AgentZeroCLI(config=CLIConfig(instance_url="http://example.test"), discover_instances=False)
+    monkeypatch.setattr(app, "_startup", AsyncMock())
+    monkeypatch.setattr(app, "_start_cli_update_check", lambda: None)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        status = app.query_one("#connection-status", ConnectionStatus)
+        assert not status.display
+
+        app._set_splash_state(manual_entry_expanded=True)
+        assert not status.display
+
+        for stage, connection_status, visible in (
+            ("connecting", "connecting", True),
+            ("error", "disconnected", True),
+            ("host", "disconnected", False),
+        ):
+            app._sync_connection_status(connection_status)
+            app._set_splash_state(stage=stage)
+            assert status.display is visible
+
+        app.connected = True
+        app.current_context_has_messages = True
+        app._sync_connection_status("connected")
+        app._sync_body_mode()
+        assert status.display
+
+
 async def test_message_queue_bar_sits_directly_below_model_switcher() -> None:
     app = AgentZeroCLI(config=CLIConfig(instance_url="http://127.0.0.1:19999"), discover_instances=False)
 
@@ -2286,7 +2324,7 @@ async def test_message_queue_bar_sits_directly_below_model_switcher() -> None:
         await pilot.pause(0.5)
 
         queue_bar = app.query_one("#message-queue-bar", MessageQueueBar)
-        assert len(model_bar.query(".model-switcher-chip")) == 1
+        assert len([chip for chip in model_bar.query(".model-switcher-chip") if chip.display]) == 1
         assert str(model_bar._main_button.label) == "codex/gpt-5.5"
         assert queue_bar.region.y == model_bar.region.y + model_bar.region.height
 
@@ -2524,6 +2562,72 @@ async def test_switch_context_persists_last_context(
     assert dummy_app.current_context == "ctx-2"
     assert dummy_app.current_context_has_messages is True
     assert dummy_app.agent_active is False
+
+
+@pytest.mark.parametrize("greeting_delivery", ["snapshot", "live"])
+async def test_new_chat_and_returning_tab_restore_intro_banner(
+    monkeypatch: pytest.MonkeyPatch,
+    greeting_delivery: str,
+) -> None:
+    app = AgentZeroCLI(config=CLIConfig(instance_url="http://example.test"), discover_instances=False)
+    for method in (
+        "_startup",
+        "_refresh_context_tab_metadata",
+        "_refresh_remote_tool_metadata",
+        "_publish_remote_tree_snapshot",
+        "_refresh_projects",
+        "_refresh_goal_bar",
+        "_refresh_model_switcher",
+        "_refresh_token_usage",
+    ):
+        monkeypatch.setattr(app, method, AsyncMock())
+    monkeypatch.setattr(app, "_start_cli_update_check", lambda: None)
+    monkeypatch.setattr(app, "_start_token_refresh", lambda: None)
+    monkeypatch.setattr(app, "_remember_context", lambda _context_id: None)
+    monkeypatch.setattr(app.client, "create_chat", AsyncMock(return_value="ctx-new"))
+    monkeypatch.setattr(app.client, "unsubscribe_context", AsyncMock())
+
+    async def subscribe(context_id: str, **_kwargs: object) -> None:
+        greeting = {
+            "context_id": context_id,
+            "event": "assistant_message",
+            "sequence": 1,
+            "data": {"text": f"Hello from {context_id}"},
+        }
+        if greeting_delivery == "live" and context_id == "ctx-new":
+            app._handle_context_event(greeting)
+        else:
+            app._handle_context_snapshot({"context_id": context_id, "events": [greeting]})
+
+    monkeypatch.setattr(app.client, "subscribe_context", subscribe)
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        app.connected = True
+        app.connector_features = {"chat_create"}
+        app.current_context = "ctx-first"
+        app._remember_context_tab("ctx-first")
+        await subscribe("ctx-first")
+        await pilot.pause()
+        log = app.query_one(ChatLog)
+        assert len(log.query(".agent-zero-banner")) == 1
+
+        tabs = app.query_one(ContextTabs)
+        assert tabs._new_span is not None
+        await pilot.click(tabs, offset=(tabs._new_span[0] + tabs.styles.padding.left + 2, 0))
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert app.current_context == "ctx-new"
+        assert len(log.query(".agent-zero-banner")) == 1
+        assert "Hello from ctx-new" in log.copyable_text(visible_only=False)
+        assert "Hello from ctx-first" not in log.copyable_text(visible_only=False)
+
+        await pilot.click(tabs, offset=(tabs.styles.padding.left + 2, 0))
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        assert app.current_context == "ctx-first"
+        assert len(log.query(".agent-zero-banner")) == 1
+        assert "Hello from ctx-first" in log.copyable_text(visible_only=False)
+        assert "Hello from ctx-new" not in log.copyable_text(visible_only=False)
 
 
 def test_context_tab_metadata_updates_active_tab(dummy_app: DummyAgentZeroCLI) -> None:
@@ -4425,6 +4529,76 @@ async def test_model_runtime_main_change_preserves_other_models(
     assert saved_preset["embedding"] == embedding_override
     if named_preset:
         assert saved_presets[0][0]["chat"] == default_chat
+
+
+@pytest.mark.parametrize("slot", ["main", "utility"])
+async def test_model_runtime_context_window_inherits_and_persists_only_active_slot(
+    dummy_app: DummyAgentZeroCLI,
+    monkeypatch: pytest.MonkeyPatch,
+    slot: str,
+) -> None:
+    from copy import deepcopy
+
+    dummy_app.current_context = "ctx-1"
+    dummy_app.connected = True
+    dummy_app.connector_features = {"model_switcher"}
+    dummy_app._model_switch_allowed = True
+    presets = [
+        {
+            "name": "Default",
+            "chat": {"provider": "openai", "name": "main", "ctx_length": 128000},
+            "utility": {"provider": "openai", "name": "utility", "ctx_length": 64000},
+        },
+        {
+            "name": "Power",
+            "chat": {"provider": "openai", "name": "power", "kwargs": {"temperature": 0}, "vision": False},
+            "utility": {"provider": "openai", "name": "utility", "ctx_length": 32000},
+            "vision": {"provider": "openai", "name": "sidecar", "override_main": False},
+            "embedding": {"provider": "openai", "name": "embedding"},
+        },
+    ]
+    saved = []
+
+    async def get_state(context_id: str) -> dict:
+        return {
+            "allowed": True, "effective_preset": "Power", "presets": deepcopy(presets),
+            "main_model": {"provider": "openai", "name": "power"},
+            "utility_model": {"provider": "openai", "name": "utility"},
+        }
+
+    async def edit(self: object, screen: object) -> ModelRuntimeResult:
+        assert screen._main_model["ctx_length"] == 128000
+        assert screen._utility_model["ctx_length"] == 32000
+        return ModelRuntimeResult(
+            main_model={**screen._main_model, **({"ctx_length": 200000} if slot == "main" else {})},
+            utility_model={**screen._utility_model, **({"ctx_length": 100000} if slot == "utility" else {})},
+            main_changed=slot == "main", utility_changed=slot == "utility",
+        )
+
+    async def save(values: list) -> dict:
+        saved.extend(values)
+        return {"ok": True}
+
+    async def activate(context_id: str, name: str) -> dict:
+        assert (context_id, name) == ("ctx-1", "Power")
+        return await get_state(context_id)
+
+    refreshed = []
+
+    async def refresh(**kwargs) -> None:
+        refreshed.append(kwargs)
+
+    monkeypatch.setattr(dummy_app.client, "get_model_switcher", get_state)
+    monkeypatch.setattr(dummy_app.client, "save_model_presets", save)
+    monkeypatch.setattr(dummy_app.client, "set_model_preset", activate)
+    monkeypatch.setattr(DummyAgentZeroCLI, "push_screen_wait", edit)
+    monkeypatch.setattr(dummy_app, "_refresh_token_usage", refresh)
+    await dummy_app._cmd_models()
+
+    expected = deepcopy(presets)
+    expected[1]["chat" if slot == "main" else "utility"]["ctx_length"] = 200000 if slot == "main" else 100000
+    assert saved == expected
+    assert refreshed == [{"context_id": "ctx-1"}]
 
 
 @pytest.mark.parametrize("change", ["native", "sidecar", "clear"])

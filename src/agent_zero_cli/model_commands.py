@@ -4,6 +4,7 @@ import asyncio
 from copy import deepcopy
 from typing import TYPE_CHECKING, Any
 
+from agent_zero_cli.composer_controls import clear_controls, refresh_controls
 from agent_zero_cli.model_config import (
     apply_model_switcher_state,
     coerce_model_config,
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 def clear_model_switcher(app: AgentZeroCLI) -> None:
     app._model_switch_allowed = False
+    clear_controls(app)
     try:
         app.query_one("#model-switcher-bar", ModelSwitcherBar).clear()
     except Exception:
@@ -48,6 +50,7 @@ async def refresh_model_switcher(app: AgentZeroCLI, *, silent: bool = True) -> N
     app._model_switch_allowed = allowed
     widget.set_state(**state_kwargs)
     widget.set_busy(False)
+    await refresh_controls(app, silent=silent)
 
 
 async def _apply_model_switcher_payload(
@@ -245,6 +248,11 @@ async def cmd_models(app: AgentZeroCLI, *, focus_target: str = "main") -> None:
         (item for item in presets if isinstance(item, dict) and item.get("name") == "Default"),
         {},
     )
+    for slot, model in (("chat", main_model), ("utility", utility_model)):
+        if "ctx_length" not in model:
+            ctx_length = coerce_model_config(default_preset.get(slot)).get("ctx_length")
+            if ctx_length is not None:
+                model["ctx_length"] = ctx_length
     supports_vision = True
     for source in (
         default_preset.get("chat"), selected_preset.get("chat"),

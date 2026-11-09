@@ -10,16 +10,25 @@
 - Tests may import package sources and package backend `src/` directories directly when validating local package contracts.
 - `test_computer_use_contract.py` checks macOS and Windows backend imports and boolean payload behavior in fresh interpreters, both with the current CLI and with `agent_zero_cli.text_utils` unavailable as in older releases.
 - `test_plugin_backend.py` exercises Core's first-action session startup through the shared `ComputerUseManager` with fake platform helpers: chat isolation/reuse, no input before startup, existing silent approval, screenshot delivery, and bounded failures without permission retries.
+- `test_composer_controls.py` covers generic optional controls, two unrelated descriptors, older Core, stale host/chat/revision work, CSRF/base paths, and anchored choice popovers using fake clients and Textual pilots. Fixtures must not depend on any particular optional plugin.
+- `test_chat_log.py` covers layout-supplied rendering widths, resize/border integrity, repaint-only status animation with cached details, and coalesced bottom-follow callbacks. Assert work counts and lifecycle behavior rather than machine-dependent timing thresholds.
 
 ## Local Contracts
 
 - Async tests use pytest/anyio with asyncio-compatible fixtures; many files set `pytestmark = pytest.mark.anyio`.
 - Prefer `tmp_path`, `monkeypatch`, and local fake classes over real user config or live services.
 - `tests/test_app.py` fake widgets mirror the widget API used by `AgentZeroCLI`. When app code calls a new widget method, update the fake.
+- Connection-header coverage checks initial host selection and manual entry stay quiet, while connection attempts, errors, and connected chats restore the status row.
+- Splash layout tests load the real stylesheet and echo host-state messages like the app. Check complete rendered button labels, heading/Refresh alignment and spacing, the bottom manual-URL toggle, absence of splash workspace paths, visible connection controls at compact sizes, stable selection/focus, and manual-input preservation across resize.
+- `test_banner.py` checks the shared splash/chat logo at width boundaries and through resize, including full lettering in short wide windows and the symbol-only fallback in narrow ones.
+- Chat-tab regression coverage clicks `+` and returns to the original tab using real widgets, checking one banner per transcript with both live and replayed greetings.
+- `test_chat_list.py` covers repeated F6 during loading/selection, immediate dismissal before a slow chat switch, mouse/keyboard selection, cancellation, and long-list navigation without per-chat widget trees.
+- Chat search coverage retains literal highlighted snippets, local title hits, candidate scope/order, keyboard focus/selection, pending-result guards, stale cancellation, empty/error recovery, and short-terminal bounds. `test_client.py` checks the query request and older/malformed Core replies; Core owns search validation and matching tests.
 - Image-rendering tests use `ImageRenderer.for_test()` or a fake renderer; they must not probe a developer terminal, import native terminal backends for headless/gateway tests, or require a live Agent Zero image endpoint.
 - Connector/plugin tests should not require a live Agent Zero server unless a test is explicitly designed as live/integration coverage.
 - Instance-discovery scenarios must stub every competing runtime path they do not exercise, including Docker CLI, local sockets, HTTP APIs, and WSL, so a developer's running containers cannot change expected results.
 - `tests/test_plugin_backend.py` may resolve a plugin root from `A0_CONNECTOR_PLUGIN_ROOT`, a local `plugin/`, or a sibling Agent Zero checkout. Keep fake Agent Zero helper modules isolated and reset between tests.
+- Its `helpers.tool` stub includes Core's boolean argument parsing, preserving caller defaults for missing or unrecognized values.
 - Certificate fixtures are test assets only; do not replace them with real secrets.
 - Transcript image widget tests use fake renderers backed by ordinary Textual widgets; focused tests must not instantiate native terminal-image controls or emit terminal graphics sequences.
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -16,17 +18,44 @@ from agent_zero_cli.widgets.splash_view import (
 
 
 class SplashViewHarness(App[None]):
+    CSS_PATH = Path(__file__).resolve().parents[1] / "src/agent_zero_cli/styles/app.tcss"
+
     def __init__(self) -> None:
         super().__init__()
-        self.latest_login_username = ""
-        self.latest_login_password = ""
+        self.submissions: list[SplashView.SubmitRequested] = []
 
     def compose(self) -> ComposeResult:
         yield SplashView()
 
-    def on_splash_view_login_fields_changed(self, event: SplashView.LoginFieldsChanged) -> None:
-        self.latest_login_username = event.username
-        self.latest_login_password = event.password
+    def on_splash_view_host_state_changed(self, event: SplashView.HostStateChanged) -> None:
+        view = self.query_one(SplashView)
+        view.set_state(view._state)
+
+    def on_splash_view_submit_requested(self, event: SplashView.SubmitRequested) -> None:
+        self.submissions.append(event)
+
+
+def test_splash_stage_updates_styles_only_when_stage_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    view = SplashView()
+    view.add_class("custom-splash")
+    updates: list[bool] = []
+    monkeypatch.setattr(view, "update_node_styles", lambda **_: updates.append(True))
+
+    for stage in ("host", "login", "connecting", "ready", "error", "host"):
+        updates.clear()
+        view._apply_stage(stage)
+        assert view.classes == {"custom-splash", f"stage-{stage}"}
+        assert updates == [True]
+        assert view._host_panel.display is (stage == "host")
+        assert view._login_panel.display is (stage == "login")
+        assert view._status_panel.display is (stage in {"connecting", "error"})
+        assert view._actions.display is (stage == "ready")
+
+        updates.clear()
+        view._apply_stage(stage)
+        assert updates == []
 
 
 @pytest.mark.parametrize(
@@ -41,7 +70,7 @@ def test_validate_connection_target_accepts_standard_urls_without_explicit_port(
     valid, message = _validate_connection_target(host)
 
     assert valid is True
-    assert message.startswith("URL format looks valid.")
+    assert message == ""
 
 
 @pytest.mark.parametrize(
@@ -66,7 +95,7 @@ def test_validate_connection_target_accepts_manual_host_without_scheme() -> None
     valid, message = _validate_connection_target("localhost:32080")
 
     assert valid is True
-    assert message == "URL format looks valid. Using http://localhost:32080."
+    assert message == "Will connect to http://localhost:32080"
 
 
 def test_validate_connection_target_rejects_unsupported_scheme() -> None:
@@ -94,7 +123,7 @@ def test_empty_host_panel_mentions_agent_zero_install_url() -> None:
 
     message = panel._status_message()
 
-    assert "TI•IA•GO runs on Agent Zero — install it from http://agent-zero.ai" in message.plain
+    assert "Install Agent Zero: http://agent-zero.ai" in message.plain
 
 
 @pytest.mark.anyio
@@ -126,6 +155,105 @@ async def test_host_rows_select_with_arrow_keys() -> None:
         assert app.focused is rows[0]
         assert view._state.selected_host_url == first.url
 
+        await pilot.press("down", "tab", "space")
+        assert app.focused is view._host_panel._remember_host
+        assert list(view.query(SplashHostRow)) == rows
+        assert [row.has_class("-selected") for row in rows] == [False, True]
+        await pilot.press("tab", "enter")
+        assert len(app.submissions) == 1
+        assert app.submissions[0].host == second.url
+        assert app.submissions[0].remember_host is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("size", [(40, 30), (80, 24), (100, 30), (160, 24), (160, 48)])
+@pytest.mark.parametrize("manual", [False, True])
+async def test_splash_connection_controls_fit_without_scrolling(
+    size: tuple[int, int], manual: bool,
+) -> None:
+    app = SplashViewHarness()
+    first = DiscoveredInstance("first", "Agent Zero", "http://localhost:5080", "5080")
+    second = DiscoveredInstance("second", "Development", "http://localhost:5081", "5081")
+
+    async with app.run_test(size=size) as pilot:
+        view = app.query_one(SplashView)
+        view.set_state(SplashState(
+            stage="host", host=first.url, local_workspace="/home/developer/workspace",
+            discovery_status="ready", discovered_instances=(first, second),
+            selected_host_url=first.url, manual_entry_expanded=manual,
+        ))
+        await pilot.pause()
+
+        panel = view._host_panel
+        assert view.max_scroll_y == 0
+        assert panel._instances_mount.max_scroll_y == 0
+        assert panel._refresh.region.y == panel._title.region.y
+        assert panel._refresh.region.right == panel.content_region.right
+        target = panel._manual_section if manual else panel._instances_mount
+        assert target.region.y == panel._title.region.bottom + 1
+        assert panel._manual_toggle.region.y > panel._hint.region.bottom
+        assert not view.query("#splash-workspace")
+        for control in (panel._button, panel._remember_host, panel._refresh, panel._manual_toggle):
+            assert control.region.width > 0
+            assert control.region in view.content_region
+        for button in (panel._button, panel._refresh, panel._manual_toggle):
+            rendered = "".join(line.text for line in button.render_lines(button.region.reset_offset))
+            assert button.label.plain in rendered
+        if manual:
+            assert panel._host.region in view.content_region
+            assert panel._host.region.bottom <= panel._button.region.y
+
+
+@pytest.mark.anyio
+async def test_manual_connection_validation_and_resize_preserve_the_target() -> None:
+    app = SplashViewHarness()
+    async with app.run_test(size=(100, 30)) as pilot:
+        view = app.query_one(SplashView)
+        view.set_state(SplashState(stage="host", discovery_status="ready", manual_entry_expanded=True))
+        await pilot.pause()
+        panel = view._host_panel
+        assert view._hero.region.height == 6
+
+        panel._host.value = "ws://localhost:5080"
+        await pilot.pause()
+        await pilot.press("enter")
+        assert panel._button.disabled
+        assert app.submissions == []
+
+        panel._host.value = "localhost:5080"
+        await pilot.pause()
+        assert not panel._button.disabled
+        await pilot.resize_terminal(80, 24)
+        await pilot.pause()
+        assert view._hero.region.height == 6
+        assert panel.connect_host == "http://localhost:5080"
+        assert panel._button.region in view.content_region
+        await pilot.press("enter")
+        assert len(app.submissions) == 1
+        assert app.submissions[0].host == "http://localhost:5080"
+
+        view.set_state(replace(view._state, manual_entry_expanded=False))
+        view.set_state(replace(view._state, manual_entry_expanded=True))
+        await pilot.pause()
+        assert panel._host.value == "localhost:5080"
+
+
+@pytest.mark.anyio
+async def test_many_hosts_scroll_to_the_keyboard_selection() -> None:
+    app = SplashViewHarness()
+    hosts = tuple(DiscoveredInstance(str(i), f"Host {i}", f"http://localhost:{5080+i}", str(5080+i)) for i in range(6))
+    async with app.run_test(size=(100, 30)) as pilot:
+        view = app.query_one(SplashView)
+        view.set_state(SplashState(
+            stage="host", discovery_status="ready", discovered_instances=hosts, selected_host_url=hosts[0].url,
+        ))
+        await pilot.pause()
+        await pilot.press(*(["down"] * 5))
+        assert app.focused.host == hosts[-1].url
+        assert view._host_panel._instances_mount.scroll_y > 0
+        await pilot.press("enter")
+        assert app.submissions[0].host == hosts[-1].url
+
 
 def test_error_back_button_requests_navigation_to_host() -> None:
     view = SplashView()
@@ -139,103 +267,3 @@ def test_error_back_button_requests_navigation_to_host() -> None:
     assert len(messages) == 1
     assert isinstance(messages[0], SplashView.ActionRequested)
     assert messages[0].action == "back"
-
-
-@pytest.mark.anyio
-async def test_background_state_sync_keeps_login_typing_and_focus() -> None:
-    app = SplashViewHarness()
-
-    async with app.run_test(size=(100, 30)) as pilot:
-        view = app.query_one(SplashView)
-        view.set_state(SplashState(stage="login", host="https://a0.example.me"))
-        await pilot.pause()
-
-        username = view.query_one("#splash-login-username")
-        username.focus()
-        await pilot.pause()
-        await pilot.press("f", "e", "r")
-
-        # Background discovery replay reproduces the pre-fix focus ping-pong:
-        # it rewrote credentials and re-focused a different login field.
-        view.set_state(SplashState(stage="login", host="https://a0.example.me"))
-        await pilot.pause()
-
-        assert username.value == "fer"
-        assert app.focused is username
-
-
-@pytest.mark.anyio
-async def test_same_stage_state_sync_does_not_move_login_focus() -> None:
-    app = SplashViewHarness()
-
-    async with app.run_test(size=(100, 30)) as pilot:
-        view = app.query_one(SplashView)
-        view.set_state(SplashState(stage="login", host="https://a0.example.me"))
-        await pilot.pause()
-
-        username = view.query_one("#splash-login-username")
-        username.focus()
-        await pilot.pause()
-
-        view.set_state(
-            SplashState(stage="login", host="https://a0.example.me", discovery_status="loading")
-        )
-        await pilot.pause()
-
-        assert app.focused is username
-
-
-@pytest.mark.anyio
-async def test_stage_change_still_refocuses_login_panel() -> None:
-    app = SplashViewHarness()
-
-    async with app.run_test(size=(100, 30)) as pilot:
-        view = app.query_one(SplashView)
-        view.set_state(SplashState(stage="connecting", host="https://a0.example.me"))
-        await pilot.pause()
-
-        view.set_state(SplashState(stage="login", host="https://a0.example.me"))
-        await pilot.pause()
-
-        assert view._state.stage == "login"
-        focused = app.focused
-        assert focused is not None
-        assert focused.id in {"splash-login-username", "splash-login-password"}
-
-
-@pytest.mark.anyio
-async def test_field_switch_with_background_state_sync_keeps_typed_other_field() -> None:
-    app = SplashViewHarness()
-
-    async with app.run_test(size=(100, 30)) as pilot:
-        view = app.query_one(SplashView)
-        view.set_state(SplashState(stage="login", host="https://a0.example.me"))
-        await pilot.pause()
-
-        username = view.query_one("#splash-login-username")
-        username.focus()
-        await pilot.pause()
-        await pilot.press("f", "e", "r")
-        await pilot.pause()
-        assert app.latest_login_username == "fer"
-
-        password = view.query_one("#splash-login-password")
-        password.focus()
-        await pilot.pause()
-        await pilot.press("9")
-        await pilot.pause()
-
-        # A background state sync replays while the password field holds focus;
-        # it must not clear the username the user already typed.
-        view.set_state(
-            SplashState(
-                stage="login",
-                host="https://a0.example.me",
-                username=app.latest_login_username,
-                password=app.latest_login_password,
-            )
-        )
-        await pilot.pause()
-
-        assert username.value == "fer"
-        assert password.value == "9"
